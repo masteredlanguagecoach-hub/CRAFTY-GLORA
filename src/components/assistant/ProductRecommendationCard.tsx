@@ -3,7 +3,7 @@
 import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ShoppingBag, Eye, Star, Sparkles, Check, Heart } from 'lucide-react';
+import { ShoppingBag, Eye, Star, Sparkles } from 'lucide-react';
 import { AssistantProductRecommendation } from '@/types/assistant';
 
 interface ProductRecommendationCardProps {
@@ -26,11 +26,11 @@ export const ProductRecommendationCard: React.FC<ProductRecommendationCardProps>
       : 0;
 
   return (
-    <div className="group relative bg-white rounded-2xl border border-craft-200/80 shadow-sm hover:shadow-md hover:border-gold-300 transition-all duration-300 overflow-hidden flex flex-col p-3.5 max-w-[280px] sm:max-w-[300px] flex-shrink-0">
+    <div className="group relative bg-white rounded-2xl border border-craft-200 shadow-sm hover:shadow-md hover:border-amber-400 transition-all duration-300 overflow-hidden flex flex-col p-3.5 max-w-[280px] sm:max-w-[300px] flex-shrink-0">
       {/* Best Match / Badge */}
       {product.isBestMatch && (
-        <div className="absolute top-2 left-2 z-10 bg-gradient-to-r from-gold-500 to-amber-600 text-white text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full shadow-sm flex items-center gap-1">
-          <Sparkles className="w-3 h-3" /> Best Match
+        <div className="absolute top-2 left-2 z-10 bg-gradient-to-r from-amber-600 to-amber-700 text-white text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full shadow-sm flex items-center gap-1">
+          <Sparkles className="w-3 h-3 text-amber-200" /> Best Match
         </div>
       )}
 
@@ -44,7 +44,7 @@ export const ProductRecommendationCard: React.FC<ProductRecommendationCardProps>
           className="object-cover"
         />
         {discountPercent > 0 && (
-          <span className="absolute bottom-2 right-2 bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md shadow">
+          <span className="absolute bottom-2 right-2 bg-rose-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md shadow">
             {discountPercent}% OFF
           </span>
         )}
@@ -55,23 +55,23 @@ export const ProductRecommendationCard: React.FC<ProductRecommendationCardProps>
         <div>
           {/* Category & Rating */}
           <div className="flex items-center justify-between text-xs text-craft-500 mb-1">
-            <span className="uppercase tracking-wider font-semibold text-[10px] text-gold-700">
+            <span className="uppercase tracking-wider font-semibold text-[10px] text-amber-800">
               {product.category}
             </span>
-            <div className="flex items-center gap-0.5 text-amber-500 font-medium">
+            <div className="flex items-center gap-0.5 text-amber-600 font-medium">
               <Star className="w-3 h-3 fill-current" />
               <span>{product.rating ?? 4.9}</span>
             </div>
           </div>
 
           {/* Title */}
-          <h4 className="font-serif font-bold text-sm text-craft-900 line-clamp-1 group-hover:text-gold-700 transition-colors">
+          <h4 className="font-serif font-bold text-sm text-craft-900 line-clamp-1 group-hover:text-amber-800 transition-colors">
             {product.name}
           </h4>
 
           {/* Match Reason Tag */}
           {product.matchReason && (
-            <p className="mt-1 text-[11px] text-emerald-700 bg-emerald-50/80 border border-emerald-100 rounded-lg px-2 py-0.5 line-clamp-1">
+            <p className="mt-1 text-[11px] font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-0.5 line-clamp-1">
               ✨ {product.matchReason}
             </p>
           )}
@@ -91,29 +91,30 @@ export const ProductRecommendationCard: React.FC<ProductRecommendationCardProps>
               )}
             </div>
             {product.isCustomizable && (
-              <span className="text-[10px] text-gold-600 font-medium block">
+              <span className="text-[10px] text-amber-700 font-semibold block">
                 ✍️ Personalizable
               </span>
             )}
           </div>
 
           {/* Quick Actions */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <Link
               href={`/product/${product.slug}`}
               target="_blank"
-              className="p-2 rounded-xl bg-craft-100 text-craft-700 hover:bg-gold-50 hover:text-gold-700 transition-colors"
+              className="p-2 rounded-xl bg-craft-100 text-craft-700 hover:bg-amber-100 hover:text-amber-900 transition-colors border border-craft-200"
               title="View Product Page"
             >
               <Eye className="w-4 h-4" />
             </Link>
 
             <button
+              type="button"
               onClick={() => onAddToCart(product)}
-              className="flex items-center gap-1 px-3 py-2 bg-gradient-to-r from-gold-600 to-amber-600 hover:from-gold-700 hover:to-amber-700 text-white rounded-xl text-xs font-semibold shadow-sm hover:shadow transition-all active:scale-95"
+              className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-emerald-900 to-craft-950 hover:from-black hover:to-black text-white border border-amber-400/40 rounded-xl text-xs font-bold shadow-sm hover:shadow transition-all active:scale-95"
             >
-              <ShoppingBag className="w-3.5 h-3.5" />
-              <span>Add</span>
+              <ShoppingBag className="w-3.5 h-3.5 text-amber-300" />
+              <span className="text-white">Add</span>
             </button>
           </div>
         </div>
