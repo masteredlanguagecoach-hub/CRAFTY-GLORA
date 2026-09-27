@@ -8,6 +8,7 @@ import { AnnouncementBar } from '@/components/common/AnnouncementBar';
 import { Navbar } from '@/components/common/Navbar';
 import { Footer } from '@/components/common/Footer';
 import { CartDrawer } from '@/components/cart/CartDrawer';
+import { AIAssistant } from '@/components/assistant/AIAssistant';
 import { APP_CONFIG } from '@/lib/config';
 
 export const metadata: Metadata = {
@@ -64,6 +65,7 @@ export default function RootLayout({
               <main className="flex-1">{children}</main>
               <Footer />
               <CartDrawer />
+              <AIAssistant />
             </WishlistProvider>
           </CartProvider>
         </ToastProvider>
