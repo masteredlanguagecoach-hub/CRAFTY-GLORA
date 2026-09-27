@@ -8,21 +8,15 @@ import {
   X,
   Send,
   ShoppingBag,
-  ArrowRight,
-  Gift,
-  RefreshCw,
-  SlidersHorizontal,
-  Bot,
-  User,
   Scale,
   Check,
-  ChevronDown,
-  ChevronRight,
-  ExternalLink,
   MessageCircle,
   ImagePlus,
-  Paperclip,
   Trash2,
+  HelpCircle,
+  CheckCircle2,
+  Layers,
+  ArrowRight,
 } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useToast } from '@/context/ToastContext';
@@ -31,6 +25,7 @@ import {
   AssistantContext,
   AssistantProductRecommendation,
   ChatResponsePayload,
+  AssistantOption,
 } from '@/types/assistant';
 import { ProductRecommendationCard } from './ProductRecommendationCard';
 import { ComparisonModal } from './ComparisonModal';
@@ -41,7 +36,7 @@ export const AIAssistant: React.FC = () => {
   const [inputMessage, setInputMessage] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [context, setContext] = useState<AssistantContext>({ step: 'initial' });
+  const [context, setContext] = useState<AssistantContext>({ step: 'greeting' });
   const [comparisonModalData, setComparisonModalData] = useState<{
     products: AssistantProductRecommendation[];
     attributes?: { label: string; values: string[] }[];
@@ -52,20 +47,27 @@ export const AIAssistant: React.FC = () => {
     useState<AssistantProductRecommendation | null>(null);
   const [customText, setCustomText] = useState('');
 
-  // Initial welcome message with short interactive questions
+  // Initial welcome message with interactive MCQ choices
   const [messages, setMessages] = useState<AssistantMessage[]>([
     {
       id: 'welcome-1',
       sender: 'assistant',
-      text: "Namaste! ✨ I'm Glora, your personal studio concierge at Crafty Glora.\n\nAre you looking for a gift for someone special, or a handcrafted piece for your own home? You can also upload any photo/inspiration you love!",
+      text: "Namaste! ✨ I'm Glora, your personal artisan concierge at Crafty Glora.\n\nWho are you shopping for today? Or feel free to upload a photo of anything that inspires you!",
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      questionType: 'single_choice',
+      options: [
+        { label: '👩 Girlfriend / Wife', value: 'Gift for Girlfriend', icon: '❤️' },
+        { label: '💐 Mother / Parents', value: 'Gift for Mother', icon: '🌸' },
+        { label: '👯 Best Friend / Sister', value: 'Gift for Friend', icon: '✨' },
+        { label: '👨 Boyfriend / Husband', value: 'Gift for Husband', icon: '🎁' },
+        { label: '🏠 For My Own Room', value: 'Home Decor for Myself', icon: '🏡' },
+        { label: '🔍 Just Exploring Ideas', value: 'Just Exploring Ideas', icon: '💡' },
+      ],
       quickReplies: [
-        '👩 Gift for Girlfriend / Wife',
-        '💐 Gift for Mother / Parents',
-        '👯 Gift for Best Friend',
+        '👩 Gift for Girlfriend',
+        '💐 Gift for Mother',
         '🏠 For My Own Room',
         '🎂 Birthday under ₹1,000',
-        '🌸 Preserved Botanical Art',
       ],
     },
   ]);
@@ -177,6 +179,8 @@ export const AIAssistant: React.FC = () => {
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           products: data.products,
           quickReplies: data.quickReplies,
+          questionType: data.questionType,
+          options: data.options,
           action: data.action,
           actionPayload: data.actionPayload,
           comparisonData: data.comparisonData,
@@ -206,14 +210,18 @@ export const AIAssistant: React.FC = () => {
         {
           id: `err-${Date.now()}`,
           sender: 'assistant',
-          text: "I had a tiny hiccup connecting to our master studio. Here are our most beloved handcrafted treasures!",
+          text: "I had a tiny connection hiccup with the studio! Who are you shopping for today?",
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          quickReplies: ['🌸 Show Floral Resin Art', '✨ View All Gifts', '💬 WhatsApp Artisan'],
+          quickReplies: ['👩 Gift for Girlfriend', '💐 Gift for Mother', '💬 WhatsApp Artisan'],
         },
       ]);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleOptionClick = (optionValue: string) => {
+    sendMessage(optionValue);
   };
 
   const handleQuickReply = (reply: string) => {
@@ -252,11 +260,15 @@ export const AIAssistant: React.FC = () => {
         {
           id: `custom-${Date.now()}`,
           sender: 'assistant',
-          text: `Added **${activeCustomizingProduct.name}** to your cart with personalized inscription "${customText}"! Would you like luxury gift wrapping or a personalized handwritten note card? 🎁`,
+          text: `Added **${activeCustomizingProduct.name}** to your cart with personalized inscription "${customText}"! ✍️\n\nWould you like luxury gift wrapping with a handwritten note card?`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          questionType: 'yes_no',
+          options: [
+            { label: '🎁 Yes, add luxury gift box (+₹149)', value: 'Add luxury gift box', icon: '🎀' },
+            { label: '🛍️ Proceed to checkout', value: 'Proceed to checkout', icon: '🚀' },
+          ],
           quickReplies: [
-            '🎁 Add Luxury Gift Box (+₹149)',
-            '💌 Add Free Handwritten Note',
+            '🎁 Add Luxury Gift Box',
             '🛍️ View Cart & Checkout',
           ],
         },
@@ -266,15 +278,15 @@ export const AIAssistant: React.FC = () => {
 
   return (
     <>
-      {/* High-Visibility Floating Trigger Button (Deep Royal Emerald & Amber Glow) */}
+      {/* High-Contrast Floating Trigger Button (Deep Emerald & Burnished Gold) */}
       <div className="fixed bottom-6 right-6 z-40">
         {!isOpen && (
           <button
             onClick={() => setIsOpen(true)}
             aria-label="Open Glora AI Assistant"
-            className="group relative flex items-center gap-3 px-5 py-3.5 bg-gradient-to-r from-emerald-900 via-craft-900 to-amber-900 text-white rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.35)] border-2 border-amber-400 hover:border-amber-300 hover:scale-105 transition-all duration-300 active:scale-95"
+            className="group relative flex items-center gap-3 px-5 py-3.5 bg-gradient-to-r from-emerald-950 via-craft-950 to-stone-900 text-white rounded-full shadow-[0_10px_35px_rgba(0,0,0,0.4)] border-2 border-amber-400 hover:border-amber-300 hover:scale-105 transition-all duration-300 active:scale-95"
           >
-            <div className="relative flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-tr from-amber-400 to-yellow-200 text-craft-900 shadow-md">
+            <div className="relative flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-tr from-amber-400 to-yellow-200 text-craft-950 shadow-inner">
               <Sparkles className="w-5 h-5 text-amber-950 animate-pulse" />
               <span className="absolute -top-1 -right-1 flex h-3 w-3">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
@@ -295,7 +307,7 @@ export const AIAssistant: React.FC = () => {
 
       {/* Expandable Chat Panel */}
       {isOpen && (
-        <div className="fixed inset-0 sm:inset-auto sm:bottom-6 sm:right-6 sm:w-[440px] sm:h-[650px] z-50 flex flex-col bg-[#FAF7F2] sm:rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.3)] border-2 border-craft-300 overflow-hidden animate-in fade-in slide-in-from-bottom-5 duration-300">
+        <div className="fixed inset-0 sm:inset-auto sm:bottom-6 sm:right-6 sm:w-[450px] sm:h-[660px] z-50 flex flex-col bg-[#FAF7F2] sm:rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.35)] border-2 border-amber-500/40 overflow-hidden animate-in fade-in slide-in-from-bottom-5 duration-300">
           {/* Header */}
           <div className="bg-gradient-to-r from-emerald-950 via-craft-900 to-stone-900 text-white p-4 flex items-center justify-between border-b border-amber-500/20 shadow-md">
             <div className="flex items-center gap-3">
@@ -313,7 +325,7 @@ export const AIAssistant: React.FC = () => {
                   </span>
                 </h3>
                 <p className="text-[11px] text-craft-300">
-                  Human-like craft guidance & image matching
+                  Thoughtful gift advice & visual matching
                 </p>
               </div>
             </div>
@@ -342,7 +354,7 @@ export const AIAssistant: React.FC = () => {
           </div>
 
           {/* Messages Stream */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-stone-50/60">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#F8F5EE]">
             {messages.map((msg) => (
               <div
                 key={msg.id}
@@ -351,10 +363,10 @@ export const AIAssistant: React.FC = () => {
                 }`}
               >
                 {/* Message Bubble */}
-                <div className="flex items-start gap-2 max-w-[88%]">
+                <div className="flex items-start gap-2 max-w-[90%]">
                   {msg.sender === 'assistant' && (
-                    <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center flex-shrink-0 mt-1 border border-amber-200 shadow-2xs">
-                      <Sparkles className="w-3.5 h-3.5" />
+                    <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-900 flex items-center justify-center flex-shrink-0 mt-1 border border-amber-300 shadow-2xs">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-700" />
                     </div>
                   )}
 
@@ -365,9 +377,9 @@ export const AIAssistant: React.FC = () => {
                         : 'bg-white text-craft-900 border border-craft-200 rounded-tl-none'
                     }`}
                   >
-                    {/* User Uploaded Image Preview in Chat */}
+                    {/* User Uploaded Image Preview */}
                     {msg.image && (
-                      <div className="relative w-48 h-36 rounded-xl overflow-hidden mb-2 border border-craft-200 bg-craft-100">
+                      <div className="relative w-48 h-36 rounded-xl overflow-hidden mb-2 border border-craft-200 bg-craft-100 shadow-inner">
                         <Image
                           src={msg.image}
                           alt="Uploaded reference photo"
@@ -378,7 +390,7 @@ export const AIAssistant: React.FC = () => {
                     )}
 
                     <div
-                      className="whitespace-pre-wrap font-sans"
+                      className="whitespace-pre-wrap font-sans text-[13.5px]"
                       dangerouslySetInnerHTML={{
                         __html: msg.text
                           .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
@@ -386,7 +398,7 @@ export const AIAssistant: React.FC = () => {
                       }}
                     />
                     <span
-                      className={`text-[10px] block mt-1 ${
+                      className={`text-[10px] block mt-1.5 ${
                         msg.sender === 'user'
                           ? 'text-amber-200 text-right'
                           : 'text-craft-400'
@@ -397,9 +409,28 @@ export const AIAssistant: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Attached Product Cards Carousel */}
+                {/* Structured Interactive MCQ / Yes-No Choice Cards */}
+                {msg.options && msg.options.length > 0 && (
+                  <div className="w-full mt-2.5 pl-9 pr-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {msg.options.map((opt, i) => (
+                      <button
+                        key={i}
+                        onClick={() => handleOptionClick(opt.value)}
+                        className="group flex items-center justify-between p-2.5 bg-white hover:bg-amber-50/80 border border-craft-200 hover:border-amber-400 rounded-xl text-xs text-left shadow-2xs transition-all active:scale-98"
+                      >
+                        <span className="flex items-center gap-2 font-medium text-craft-800 group-hover:text-amber-950">
+                          {opt.icon && <span className="text-sm">{opt.icon}</span>}
+                          <span>{opt.label}</span>
+                        </span>
+                        <ArrowRight className="w-3.5 h-3.5 text-craft-300 group-hover:text-amber-600 transition-transform group-hover:translate-x-0.5" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Attached Product Cards Carousel (Only rendered when decision is reached) */}
                 {msg.products && msg.products.length > 0 && (
-                  <div className="w-full mt-3 overflow-x-auto pb-2 flex gap-3 snap-x no-scrollbar">
+                  <div className="w-full mt-3 overflow-x-auto pb-2 flex gap-3 snap-x no-scrollbar pl-2">
                     {msg.products.map((product) => (
                       <div key={product.id} className="snap-start">
                         <ProductRecommendationCard
@@ -411,11 +442,11 @@ export const AIAssistant: React.FC = () => {
                   </div>
                 )}
 
-                {/* Comparison Data Button */}
+                {/* Comparison Button */}
                 {msg.comparisonData && (
                   <button
                     onClick={() => setComparisonModalData(msg.comparisonData!)}
-                    className="mt-2.5 flex items-center gap-1.5 px-3 py-1.5 bg-craft-100 hover:bg-amber-50 border border-craft-300 rounded-xl text-xs font-semibold text-craft-800 transition-colors"
+                    className="mt-2.5 ml-9 flex items-center gap-1.5 px-3 py-1.5 bg-craft-100 hover:bg-amber-50 border border-craft-300 rounded-xl text-xs font-semibold text-craft-800 transition-colors"
                   >
                     <Scale className="w-3.5 h-3.5 text-amber-700" />
                     <span>View Side-by-Side Comparison</span>
@@ -424,12 +455,12 @@ export const AIAssistant: React.FC = () => {
 
                 {/* Quick Reply Chips */}
                 {msg.quickReplies && msg.quickReplies.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2.5 max-w-full">
+                  <div className="flex flex-wrap gap-1.5 mt-2 pl-9 max-w-full">
                     {msg.quickReplies.map((reply, i) => (
                       <button
                         key={i}
                         onClick={() => handleQuickReply(reply)}
-                        className="px-3 py-1.5 bg-white hover:bg-amber-50 text-craft-800 hover:text-amber-900 border border-craft-200 hover:border-amber-300 rounded-full text-xs font-medium shadow-2xs transition-all active:scale-95"
+                        className="px-2.5 py-1 bg-craft-50 hover:bg-amber-100/70 text-craft-700 hover:text-amber-950 border border-craft-200 hover:border-amber-300 rounded-full text-[11px] font-medium transition-all active:scale-95"
                       >
                         {reply}
                       </button>
@@ -441,9 +472,9 @@ export const AIAssistant: React.FC = () => {
 
             {/* Typing Indicator */}
             {isLoading && (
-              <div className="flex items-center gap-2 text-craft-500 text-xs py-2">
-                <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center border border-amber-200">
-                  <Sparkles className="w-3.5 h-3.5 animate-spin" />
+              <div className="flex items-center gap-2 text-craft-500 text-xs py-2 pl-2">
+                <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center border border-amber-300">
+                  <Sparkles className="w-3.5 h-3.5 animate-spin text-amber-700" />
                 </div>
                 <div className="bg-white border border-craft-200 rounded-2xl rounded-tl-none px-3.5 py-2.5 flex items-center gap-1.5 shadow-2xs">
                   <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce"></span>
@@ -507,7 +538,7 @@ export const AIAssistant: React.FC = () => {
           {selectedImage && (
             <div className="px-3 py-2 bg-amber-50/90 border-t border-amber-200 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-amber-300">
+                <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-amber-300 shadow-2xs">
                   <Image
                     src={selectedImage}
                     alt="Selected upload"
@@ -563,14 +594,14 @@ export const AIAssistant: React.FC = () => {
                 type="text"
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
-                placeholder="Ask for ideas, occasion, budget, or upload photo..."
-                className="flex-1 text-xs sm:text-sm px-3.5 py-2.5 rounded-2xl bg-stone-50 border border-craft-200 focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:bg-white transition-all text-craft-900 placeholder-craft-400"
+                placeholder="Type your response or ask a question..."
+                className="flex-1 text-xs sm:text-sm px-3.5 py-2.5 rounded-2xl bg-[#FAF7F2] border border-craft-200 focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:bg-white transition-all text-craft-900 placeholder-craft-400"
               />
               <button
                 type="submit"
                 disabled={(!inputMessage.trim() && !selectedImage) || isLoading}
                 aria-label="Send Message"
-                className="p-2.5 bg-gradient-to-r from-emerald-900 to-craft-900 hover:from-emerald-950 hover:to-black text-white rounded-2xl shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 flex-shrink-0"
+                className="p-2.5 bg-gradient-to-r from-emerald-950 to-craft-950 hover:from-black hover:to-black text-white rounded-2xl shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 flex-shrink-0"
               >
                 <Send className="w-4 h-4 text-amber-300" />
               </button>

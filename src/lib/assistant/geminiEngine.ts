@@ -3,6 +3,7 @@ import {
   AssistantContext,
   AssistantProductRecommendation,
   ChatResponsePayload,
+  AssistantOption,
 } from '@/types/assistant';
 
 const GEMINI_API_KEY =
@@ -10,7 +11,6 @@ const GEMINI_API_KEY =
   process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
   '';
 
-// Enhanced product metadata tags mapping
 export function enrichProductMetadata(product: Product) {
   const name = product.name.toLowerCase();
   const desc = (product.description + ' ' + product.shortDescription + ' ' + (product.materials || '')).toLowerCase();
@@ -75,7 +75,7 @@ export function matchProducts(
       } else if (meta.effectivePrice <= budget * 1.2) {
         score += 10;
       } else {
-        score -= 25;
+        score -= 30;
       }
     }
 
@@ -85,7 +85,7 @@ export function matchProducts(
     const wantsRomantic = query.includes('romantic') || query.includes('love') || query.includes('girlfriend') || query.includes('wife') || context.style === 'romantic' || context.occasion === 'anniversary' || context.occasion === 'valentine';
     const wantsCute = query.includes('cute') || query.includes('sweet') || context.style === 'cute';
     const wantsFloral = query.includes('flower') || query.includes('floral') || query.includes('botanical') || query.includes('plant') || context.style === 'floral';
-    const wantsPersonalized = query.includes('personal') || query.includes('name') || query.includes('custom') || query.includes('inscri') || context.style === 'personalized';
+    const wantsPersonalized = query.includes('personal') || query.includes('name') || query.includes('custom') || query.includes('inscri') || context.style === 'personalized' || context.wantsPersonalized === true;
     const wantsWood = query.includes('wood') || query.includes('wooden') || query.includes('plaque') || context.style === 'wood';
     const wantsCeramic = query.includes('ceramic') || query.includes('pot') || query.includes('vase') || context.style === 'ceramic';
     const wantsCandle = query.includes('candle') || query.includes('holder') || query.includes('terrazzo') || context.style === 'candle';
@@ -166,9 +166,8 @@ export function matchProducts(
       if (desc.includes(w)) score += 10;
     }
 
-    // If customer uploaded an image and product is aesthetic/craft
     if (hasImage && (meta.isFloral || meta.isCeramic || meta.isWood || product.isCustomizable)) {
-      score += 15;
+      score += 20;
     }
 
     return {
@@ -179,7 +178,6 @@ export function matchProducts(
     };
   });
 
-  // Sort descending by score
   const sorted = scored.sort((a, b) => b.score - a.score);
 
   if (sorted.length > 0 && sorted[0].score > 15) {
@@ -197,8 +195,19 @@ export function extractUserIntent(
   existingContext: AssistantContext,
   lastShownProducts: Product[] = []
 ): AssistantContext {
-  const text = userText.toLowerCase();
+  const text = userText.toLowerCase().trim();
   const context = { ...existingContext };
+
+  // Yes / No answers
+  if (text === 'yes' || text.startsWith('yes ') || text === 'yup' || text === 'sure' || text === 'yeah') {
+    if (context.step === 'clarifying') {
+      context.wantsPersonalized = true;
+    }
+  } else if (text === 'no' || text.startsWith('no ') || text === 'nope' || text === 'nah') {
+    if (context.step === 'clarifying') {
+      context.wantsPersonalized = false;
+    }
+  }
 
   // 1. Budget extraction
   const budgetMatch = text.match(/(?:under|below|around|about|within|max|upto|budget(?:\s+is)?|rs\.?|inr|₹)?\s*(\d{1,2}(?:,\d{3})+|\d+)\s*(?:k|thousand|rupees|rs|inr|₹)?/i);
@@ -225,7 +234,7 @@ export function extractUserIntent(
     { key: 'friend', patterns: ['friend', 'bestie', 'buddy', 'pal', 'colleague'] },
     { key: 'husband', patterns: ['husband', 'hubby'] },
     { key: 'boyfriend', patterns: ['boyfriend', 'bf'] },
-    { key: 'myself', patterns: ['myself', 'for me', 'my room', 'my home'] },
+    { key: 'myself', patterns: ['myself', 'for me', 'my room', 'my home', 'self'] },
   ];
   for (const r of recipients) {
     if (r.patterns.some((p) => text.includes(p))) {
@@ -242,7 +251,7 @@ export function extractUserIntent(
     { key: 'housewarming', patterns: ['housewarming', 'house warming', 'new home', 'griha pravesh'] },
     { key: 'valentine', patterns: ["valentine's", 'valentine', 'valentines'] },
     { key: 'festive', patterns: ['diwali', 'christmas', 'new year', 'rakhi', 'festival', 'festive'] },
-    { key: 'just because', patterns: ['just because', 'casual', 'surprise', 'no reason'] },
+    { key: 'just because', patterns: ['just because', 'casual', 'surprise', 'no reason', 'exploring'] },
   ];
   for (const occ of occasions) {
     if (occ.patterns.some((p) => text.includes(p))) {
@@ -260,7 +269,10 @@ export function extractUserIntent(
   if (text.includes('candle') || text.includes('holder') || text.includes('terrazzo')) context.style = 'candle';
   if (text.includes('elegant') || text.includes('classy') || text.includes('luxury') || text.includes('premium')) context.style = 'premium';
   if (text.includes('cheap') || text.includes('affordable') || text.includes('budget friendly')) context.style = 'cheap';
-  if (text.includes('personal') || text.includes('name') || text.includes('custom')) context.style = 'personalized';
+  if (text.includes('personal') || text.includes('name') || text.includes('custom')) {
+    context.style = 'personalized';
+    context.wantsPersonalized = true;
+  }
 
   // 5. Contextual Product References
   if (lastShownProducts.length > 0) {
@@ -282,7 +294,7 @@ export function extractUserIntent(
 }
 
 /**
- * Generate human-like, warm, empathetic shopping advice with short clarifying questions
+ * Intelligent, Human-like decision making with structured MCQ/Yes-No questions when needed
  */
 export async function generateGeminiAssistantReply(
   userMessage: string,
@@ -292,53 +304,41 @@ export async function generateGeminiAssistantReply(
   allProducts: Product[],
   hasImage = false
 ): Promise<ChatResponsePayload> {
-  const isRecipientKnown = Boolean(context.recipient);
-  const isOccasionKnown = Boolean(context.occasion);
-  const isBudgetKnown = Boolean(context.budget);
+  const text = userMessage.toLowerCase().trim();
+  const isGreetingOnly = ['hi', 'hello', 'hey', 'namaste', 'hola', 'good morning', 'good evening', 'start'].includes(text);
 
-  // If Gemini API Key is present, call Gemini 1.5 Flash / Pro model
+  // If Gemini API Key is available, use LLM
   if (GEMINI_API_KEY) {
     try {
       const catalogSummary = allProducts
         .map(
           (p) =>
-            `- ID: ${p.id}, Name: "${p.name}", Price: ₹${p.salePrice ?? p.price}, Category: ${p.category}, Customizable: ${p.isCustomizable}, Materials: ${p.materials || 'Handcrafted'}`
+            `- ID: ${p.id}, Name: "${p.name}", Price: ₹${p.salePrice ?? p.price}, Category: ${p.category}, Customizable: ${p.isCustomizable}`
         )
         .join('\n');
 
-      const systemInstruction = `You are Glora, the warm, charming, and thoughtful master artisan & gift consultant at CRAFTY GLORA (a luxury handmade craft studio).
-Your personality: Empathetic, creative, attentive, and deeply appreciative of handmade arts (preserved botanical resin, bespoke wooden plaques, terrazzo candles, ceramic pottery, macrame).
+      const systemInstruction = `You are Glora, a thoughtful, human-like master artisan & shopping concierge at CRAFTY GLORA handmade crafts.
 Rules:
-1. Speak naturally like a human studio consultant, never sound robotic or like a form template.
-2. Ask 1 gentle, short question at a time if you need to narrow down preferences (e.g. asking their budget or recipient's favorite vibe). If the customer already provided details or uploaded an image, recommend immediately with enthusiasm!
-3. Keep responses concise (2 to 4 sentences).
-4. If an image is uploaded by customer, praise the aesthetic reference, describe the style/color tones, and recommend matching handcrafted products from catalog.
-5. Emphasize handmade warmth, customization possibilities, and signature gift packaging.`;
+1. If the user only says "hi" or "hello", DO NOT dump products! Greet them warmly and ask who they are shopping for or what vibe they are imagining.
+2. Only recommend products when you have enough context (or if they upload an image / ask for specific items).
+3. Think and ask short clarifying questions (like multiple choice or yes/no) to discover what they truly need.
+4. Keep answers warm, concise (2-3 sentences), and conversational.`;
 
       const promptContext = `Customer message: "${userMessage}"
-Has uploaded image: ${hasImage ? 'Yes (reference photo uploaded)' : 'No'}
-Current Context: Recipient=${context.recipient || 'Unknown'}, Occasion=${context.occasion || 'Unknown'}, Budget=${context.budget || 'Unknown'}, Style=${context.style || 'Unknown'}
-Available catalog items:
-${catalogSummary}
+Has uploaded image: ${hasImage ? 'Yes' : 'No'}
+Current context: Recipient=${context.recipient || 'None'}, Occasion=${context.occasion || 'None'}, Budget=${context.budget || 'None'}
+Catalog summary:
+${catalogSummary}`;
 
-Respond directly as Glora.`;
-
-      const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-      const res = await fetch(geminiEndpoint, {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [
-            ...history.slice(-4).map((h) => ({
-              role: h.role === 'user' ? 'user' : 'model',
-              parts: [{ text: h.content }],
-            })),
+            ...history.slice(-4).map((h) => ({ role: h.role === 'user' ? 'user' : 'model', parts: [{ text: h.content }] })),
             { role: 'user', parts: [{ text: `${systemInstruction}\n\n${promptContext}` }] },
           ],
-          generationConfig: {
-            maxOutputTokens: 200,
-            temperature: 0.75,
-          },
+          generationConfig: { maxOutputTokens: 200, temperature: 0.75 },
         }),
       });
 
@@ -346,160 +346,175 @@ Respond directly as Glora.`;
         const data = await res.json();
         const geminiReply = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
         if (geminiReply) {
-          return buildResponsePayload(geminiReply, context, recommendedProducts, allProducts, hasImage);
+          // Determine if we should show products
+          const shouldShowProducts = !isGreetingOnly && (Boolean(context.recipient) || Boolean(context.budget) || Boolean(context.style) || hasImage || text.includes('show') || text.includes('gift') || text.includes('product'));
+          return formatOutput(geminiReply, context, shouldShowProducts ? recommendedProducts : [], allProducts, hasImage);
         }
       }
     } catch (err) {
-      console.warn('Gemini API call notice, falling back to dynamic conversational engine:', err);
+      console.warn('Gemini LLM notice, using intelligent dialogue engine:', err);
     }
   }
 
-  // Dynamic Natural Human Dialogue Engine (High-IQ Heuristics)
-  let reply = '';
-  const text = userMessage.toLowerCase();
+  // --- Dynamic Cognitive Conversational Engine ---
+  
+  // Case 1: Simple Greeting ("Hi", "Hello") -> DO NOT SHOW PRODUCTS, ASK FIRST QUESTION
+  if (isGreetingOnly) {
+    context.step = 'greeting';
+    return {
+      reply: "Namaste! ✨ Wonderful to have you here at Crafty Glora. I'm Glora, your studio concierge.\n\nWho are you shopping for today, or are you looking for something special for your own space?",
+      questionType: 'single_choice',
+      options: [
+        { label: '👩 Girlfriend / Wife', value: 'Gift for Girlfriend', icon: '❤️' },
+        { label: '💐 Mother / Parents', value: 'Gift for Mother', icon: '🌸' },
+        { label: '👯 Best Friend / Sister', value: 'Gift for Friend', icon: '✨' },
+        { label: '👨 Boyfriend / Husband', value: 'Gift for Husband', icon: '🎁' },
+        { label: '🏠 For My Own Room', value: 'Home Decor for Myself', icon: '🏡' },
+        { label: '🔍 Just Exploring Ideas', value: 'Just Exploring Ideas', icon: '💡' },
+      ],
+      quickReplies: ['🎁 Gift for Girlfriend', '💐 Gift for Mother', '🏠 For My Room', '✨ Surprise Me'],
+      updatedContext: context,
+    };
+  }
 
-  // 1. If customer uploaded an image
+  // Case 2: User uploaded an image
   if (hasImage) {
-    if (recommendedProducts.length > 0) {
-      reply = `What a lovely inspiration! 🎨 I analyzed the colors and handmade aesthetic in your image and handpicked these handcrafted pieces from our studio that match that exact vibe:`;
-    } else {
-      reply = `Thank you for sharing this beautiful photo! ✨ It has such a warm, artistic aesthetic. What budget or recipient do you have in mind so I can tailor the exact craft for you?`;
-    }
+    context.step = 'recommending';
+    return {
+      reply: "What a stunning visual aesthetic! 🎨 I analyzed the colors, textures, and handmade charm in your photo. Here are the handcrafted pieces in our studio that capture that exact vibe:",
+      products: recommendedProducts.length > 0 ? recommendedProducts : allProducts.slice(0, 3),
+      questionType: 'single_choice',
+      options: [
+        { label: '✍️ Add Custom Name / Date', value: 'I want to customize with a name', icon: '✍️' },
+        { label: '🎁 Gift Wrap & Box', value: 'Add luxury gift box', icon: '🎀' },
+        { label: '💰 Filter under ₹1,000', value: 'Show cheaper options under 1000', icon: '🪙' },
+      ],
+      quickReplies: ['✍️ Personalize with Name', '💰 Under ₹1,000', '⚖️ Compare Top 2', '💬 WhatsApp Artisan'],
+      updatedContext: context,
+    };
   }
-  // 2. Direct comparisons
-  else if (text.includes('compare') || text.includes('difference between') || text.includes('vs')) {
-    reply = `Here is a side-by-side breakdown of the craftsmanship, materials, and pricing to help you decide easily:`;
-  }
-  // 3. Customer asking for guidance / decision
-  else if (text.includes('which one') || text.includes('help me choose') || text.includes('better')) {
-    if (recommendedProducts.length >= 2) {
-      const first = recommendedProducts[0];
-      const second = recommendedProducts[1];
-      reply = `If you want something deeply personal and timeless, I wholeheartedly recommend **${first.name}** (${first.matchReason}). If you prefer a subtle decorative touch, **${second.name}** is equally stunning! ✨`;
-    } else {
-      reply = `Based on what you shared, our top recommendation is **${recommendedProducts[0]?.name || 'our Preserved Botanical Keepsake'}** — it's beloved by our patrons!`;
-    }
-  }
-  // 4. If selected a specific item
-  else if (context.selectedProductId) {
+
+  // Case 3: User selected or mentioned a specific item
+  if (context.selectedProductId) {
     const selected = allProducts.find((p) => p.id === context.selectedProductId);
     if (selected) {
       if (selected.isCustomizable) {
-        reply = `Wonderful taste! **${selected.name}** is hand-sculpted in our studio. Would you like to personalize it with a custom name, initials, or a special date? ✍️`;
+        return {
+          reply: `An exquisite choice! **${selected.name}** is hand-crafted in our studio.\n\nWould you like our artisans to personalize this with custom engraved names, initials, or a memorable date? ✍️`,
+          products: [selected],
+          questionType: 'yes_no',
+          options: [
+            { label: '✅ Yes, add personal name/date', value: 'Yes, I want to personalize it', icon: '✍️' },
+            { label: '❌ No, standard edition is fine', value: 'No, standard edition', icon: '✨' },
+          ],
+          quickReplies: ['Yes, add name', 'No, keep it standard', '🎁 Add Gift Box'],
+          updatedContext: context,
+        };
       } else {
-        reply = `Fantastic choice! **${selected.name}** is in stock and comes nestled in our signature luxury gift box with dried botanical accents. 🎁`;
+        return {
+          reply: `Wonderful pick! **${selected.name}** is in stock and ready to ship.\n\nWould you like us to nestle this inside our signature luxury gift box with dried botanical accents? 🎁`,
+          products: [selected],
+          questionType: 'yes_no',
+          options: [
+            { label: '🎁 Yes, add luxury gift box (+₹149)', value: 'Yes, add gift box', icon: '🎀' },
+            { label: '📦 Standard eco packaging', value: 'Standard packaging', icon: '🌿' },
+          ],
+          quickReplies: ['🎁 Add Gift Box', '🛍️ Add to Cart', '⚖️ Show Alternatives'],
+          updatedContext: context,
+        };
       }
-    } else {
-      reply = `Got it! I've selected that handcrafted piece for you.`;
     }
-  }
-  // 5. If we have recipient or style or budget and can show recommendations
-  else if (recommendedProducts.length > 0 && (isRecipientKnown || isOccasionKnown || isBudgetKnown || context.style)) {
-    const count = recommendedProducts.length;
-    if (context.recipient && context.budget) {
-      reply = `I found ${count} heartfelt handmade treasures for your **${context.recipient}** under ₹${context.budget.toLocaleString('en-IN')}:`;
-    } else if (context.recipient && context.occasion) {
-      reply = `Celebrating your **${context.recipient}'s ${context.occasion}**! 🎉 Here are ${count} keepsake gifts sculpted for this special moment:`;
-    } else if (context.recipient) {
-      reply = `Here are ${count} artisan gifts your **${context.recipient}** will cherish. Would you like me to filter within a specific budget? 💰`;
-    } else if (context.budget) {
-      reply = `Here are ${count} premium handcrafted pieces comfortably within your **₹${context.budget.toLocaleString('en-IN')}** budget:`;
-    } else {
-      reply = `Here are our most adored handcrafted creations that match your taste:`;
-    }
-  }
-  // 6. Natural conversational clarifying questions
-  else if (!isRecipientKnown && !isOccasionKnown) {
-    reply = `I'd love to help you find something truly special! 🎁 Who are you shopping for today, or is this a treat for your own home?`;
-  } else if (!isBudgetKnown) {
-    reply = `That sounds wonderful for your ${context.recipient || 'special someone'}! Do you have a budget in mind (e.g. under ₹1,000 or premium)?`;
-  } else {
-    reply = `Here are our studio's signature handcrafted bestsellers:`;
   }
 
-  return buildResponsePayload(reply, context, recommendedProducts, allProducts, hasImage);
+  // Case 4: We know Recipient, but NOT Budget or Style -> Clarify Budget with MCQ
+  if (context.recipient && !context.budget && !context.style) {
+    context.step = 'clarifying';
+    return {
+      reply: `Got it! A gift for your **${context.recipient}** is so thoughtful. 💝\n\nTo help me curate the best match, what budget range are you comfortable with?`,
+      questionType: 'single_choice',
+      options: [
+        { label: '🪙 Budget-friendly (Under ₹1,000)', value: 'Under ₹1,000', icon: '🪙' },
+        { label: '✨ Classic Gift (₹1,000 — ₹1,800)', value: '₹1,000 to ₹1,800', icon: '✨' },
+        { label: '💎 Luxury Keepsake (₹1,800 — ₹3,500)', value: 'Above ₹1,800', icon: '💎' },
+        { label: '👑 No Strict Budget', value: 'No strict budget, show best', icon: '👑' },
+      ],
+      quickReplies: ['Under ₹1,000', '₹1,000 — ₹1,800', 'Above ₹1,800', '🌸 Romantic Floral Only'],
+      updatedContext: context,
+    };
+  }
+
+  // Case 5: We know Recipient and Budget, but NOT Occasion or Personalization preference
+  if (context.recipient && context.budget && context.wantsPersonalized === undefined && !context.occasion) {
+    context.step = 'clarifying';
+    return {
+      reply: `Perfect! Within ₹${context.budget.toLocaleString('en-IN')} for your ${context.recipient}, we have breathtaking options.\n\nWould you prefer a **personalized piece** (with custom engraved names/dates) or a **ready-to-gift art decor**?`,
+      questionType: 'single_choice',
+      options: [
+        { label: '✍️ Personalized (Custom Name/Date)', value: 'I want personalized with name', icon: '✍️' },
+        { label: '🌸 Botanical / Floral Resin Art', value: 'Botanical floral resin art', icon: '🌸' },
+        { label: '🪵 Rustic Wood / Ceramic Decor', value: 'Wood or ceramic home decor', icon: '🪵' },
+        { label: '🕯️ Aromatic Terrazzo Candle', value: 'Handmade scented candle', icon: '🕯️' },
+      ],
+      quickReplies: ['✍️ Personalized', '🌸 Botanical Resin', '🪵 Rustic Wood', '🕯️ Scented Candle'],
+      updatedContext: context,
+    };
+  }
+
+  // Case 6: We have sufficient context (Recipient + Budget / Style / Occasion) -> PRESENT CURATED PRODUCTS
+  if (recommendedProducts.length > 0) {
+    context.step = 'recommending';
+    const recipientText = context.recipient ? `for your **${context.recipient}**` : '';
+    const budgetText = context.budget ? `under **₹${context.budget.toLocaleString('en-IN')}**` : '';
+
+    return {
+      reply: `I carefully evaluated our studio catalog and selected these ${recommendedProducts.length} handcrafted treasures ${recipientText} ${budgetText}. ✨\n\nWhich of these styles appeals to you most?`,
+      products: recommendedProducts,
+      questionType: 'single_choice',
+      options: [
+        { label: '❤️ I love the 1st one', value: 'I like the first product', icon: '✨' },
+        { label: '🌸 I love the 2nd one', value: 'I like the second product', icon: '💖' },
+        { label: '⚖️ Compare them side-by-side', value: 'Compare these options', icon: '⚖️' },
+        { label: '🔄 Show different styles', value: 'Show different styles', icon: '🔄' },
+      ],
+      quickReplies: [
+        '❤️ Choose 1st one',
+        '🌸 Choose 2nd one',
+        '⚖️ Compare Side-by-Side',
+        '💰 Show Cheaper',
+        '✨ More Premium',
+      ],
+      updatedContext: context,
+    };
+  }
+
+  // Fallback: Clarify what aesthetic they like
+  return {
+    reply: "I'd love to help you find the perfect handcrafted piece! ✨ What craft style catches your eye?",
+    questionType: 'single_choice',
+    options: [
+      { label: '🌸 Preserved Botanical Resin', value: 'Floral resin art', icon: '🌸' },
+      { label: '🪵 Bespoke Wooden Plaques', value: 'Custom wood plaque', icon: '🪵' },
+      { label: '🏺 Hand-thrown Ceramics & Vases', value: 'Ceramic pottery', icon: '🏺' },
+      { label: '🕯️ Terrazzo Scented Candles', value: 'Terrazzo candle', icon: '🕯️' },
+    ],
+    quickReplies: ['🌸 Floral Resin', '🪵 Wood Plaque', '🏺 Ceramic Vase', '🕯️ Candle'],
+    updatedContext: context,
+  };
 }
 
-function buildResponsePayload(
+function formatOutput(
   reply: string,
   context: AssistantContext,
   recommendedProducts: AssistantProductRecommendation[],
   allProducts: Product[],
   hasImage = false
 ): ChatResponsePayload {
-  let quickReplies: string[] = [];
-
-  if (recommendedProducts.length > 0) {
-    quickReplies = [
-      '❤️ More Romantic',
-      '💰 Under ₹1,000',
-      '✨ More Luxury',
-      '🌸 Preserved Botanicals',
-      '🪵 Wooden Plaques',
-      '✍️ Add Custom Name',
-      '⚖️ Compare Top 2',
-      '🎁 Gift Wrap It',
-      '💬 WhatsApp Artisan',
-    ];
-  } else if (!context.recipient) {
-    quickReplies = [
-      '👩 Girlfriend / Wife',
-      '💐 Mother / Parents',
-      '👯 Best Friend / Sister',
-      '👨 Boyfriend / Husband',
-      '🏠 For My Own Room',
-      '✨ Just Exploring',
-    ];
-  } else if (!context.budget) {
-    quickReplies = [
-      '🪙 Under ₹1,000',
-      '✨ ₹1,000 — ₹1,800',
-      '💎 ₹1,800 — ₹3,000',
-      '👑 No Budget Limit',
-    ];
-  } else {
-    quickReplies = [
-      '🌸 Botanical Resin',
-      '🪵 Engraved Wood',
-      '🏺 Handmade Ceramic',
-      '🕯️ Terrazzo Candle',
-      '✨ Show Bestsellers',
-    ];
-  }
-
-  let comparisonData = undefined;
-  if (recommendedProducts.length >= 2) {
-    comparisonData = {
-      products: recommendedProducts.slice(0, 3),
-      attributes: [
-        {
-          label: 'Price',
-          values: recommendedProducts.slice(0, 3).map((p) => `₹${p.salePrice ?? p.price}`),
-        },
-        {
-          label: 'Customizable',
-          values: recommendedProducts.slice(0, 3).map((p) => (p.isCustomizable ? 'Yes ✍️ (Name / Date)' : 'Standard Edition')),
-        },
-        {
-          label: 'Craft Medium',
-          values: recommendedProducts.slice(0, 3).map((p) => (p.materials ? p.materials.split(',')[0] : 'Artisan Crafted')),
-        },
-        {
-          label: 'Gift Packaging',
-          values: recommendedProducts.slice(0, 3).map(() => 'Signature Box Included 🎁'),
-        },
-      ],
-    };
-  }
-
   return {
     reply,
     products: recommendedProducts.length > 0 ? recommendedProducts : undefined,
-    quickReplies,
-    updatedContext: {
-      ...context,
-      lastShownProductIds: recommendedProducts.map((p) => p.id),
-    },
-    comparisonData,
+    quickReplies: recommendedProducts.length > 0
+      ? ['❤️ Choose 1st one', '⚖️ Compare Options', '💰 Cheaper', '✍️ Personalize', '💬 WhatsApp Artisan']
+      : ['🎁 Gift for Girlfriend', '💐 Gift for Mother', '🪙 Under ₹1,000', '🌸 Preserved Botanicals'],
+    updatedContext: context,
   };
 }

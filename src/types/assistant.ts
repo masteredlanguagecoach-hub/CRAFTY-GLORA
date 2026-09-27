@@ -12,7 +12,9 @@ export interface AssistantContext {
   customization?: CustomizationOption;
   giftPackaging?: 'box' | 'wrap' | 'none';
   giftMessage?: string;
-  step?: 'initial' | 'asking_recipient' | 'asking_occasion' | 'asking_budget' | 'recommending' | 'customizing' | 'packaging' | 'messaging' | 'cart_ready';
+  wantsPersonalized?: boolean;
+  step?: 'greeting' | 'clarifying' | 'recommending' | 'refining' | 'customizing';
+  questionsAsked?: number;
 }
 
 export interface AssistantProductRecommendation extends Product {
@@ -34,6 +36,12 @@ export type AssistantActionType =
   | 'HUMAN_HANDOFF'
   | 'NONE';
 
+export interface AssistantOption {
+  label: string;
+  value: string;
+  icon?: string;
+}
+
 export interface AssistantMessage {
   id: string;
   sender: 'user' | 'assistant' | 'system';
@@ -42,6 +50,8 @@ export interface AssistantMessage {
   image?: string; // image preview url or base64
   products?: AssistantProductRecommendation[];
   quickReplies?: string[];
+  questionType?: 'single_choice' | 'yes_no' | 'open' | 'none';
+  options?: AssistantOption[];
   action?: AssistantActionType;
   actionPayload?: any;
   comparisonData?: {
@@ -69,6 +79,8 @@ export interface ChatResponsePayload {
   reply: string;
   products?: AssistantProductRecommendation[];
   quickReplies?: string[];
+  questionType?: 'single_choice' | 'yes_no' | 'open' | 'none';
+  options?: AssistantOption[];
   action?: AssistantActionType;
   actionPayload?: any;
   updatedContext: AssistantContext;
