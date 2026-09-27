@@ -12,37 +12,38 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: NextRequest) {
   try {
     const body: ChatRequestPayload = await req.json();
-    const { message, history = [], context = {}, currentCartItems = [] } = body;
+    const { message, image, history = [], context = {}, currentCartItems = [] } = body;
 
-    if (!message || typeof message !== 'string') {
+    if ((!message || typeof message !== 'string') && !image) {
       return NextResponse.json(
-        { error: 'Message text is required' },
+        { error: 'Message or image is required' },
         { status: 400 }
       );
     }
 
-    // 1. Fetch fresh catalog products from repository (Google Sheets / in-memory fallback)
+    const effectiveMessage = message || (image ? 'I uploaded this reference photo for gift inspiration' : '');
+
+    // 1. Fetch catalog products
     const allProducts = await productRepo.getAll();
 
-    // 2. Extract semantic intents from the user's message & update context
-    const extractedIntent = extractUserIntent(message, context);
-    const updatedContext = { ...context, ...extractedIntent };
+    // 2. Extract semantic intents
+    const updatedContext = extractUserIntent(effectiveMessage, context);
 
-    // 3. Score and rank catalog products
-    const matchedProducts = matchProducts(allProducts, updatedContext, message);
+    // 3. Score products (with image weighting if image present)
+    const matchedProducts = matchProducts(allProducts, updatedContext, effectiveMessage, Boolean(image));
 
-    // Track recently shown product IDs for contextual references ("the second one", "cheaper one", etc.)
     if (matchedProducts.length > 0) {
       updatedContext.lastShownProductIds = matchedProducts.map((p) => p.id);
     }
 
-    // 4. Generate AI response (using Gemini API or heuristic intelligence engine)
+    // 4. Generate AI response
     const assistantResponse: ChatResponsePayload = await generateGeminiAssistantReply(
-      message,
+      effectiveMessage,
       history,
       updatedContext,
       matchedProducts,
-      allProducts
+      allProducts,
+      Boolean(image)
     );
 
     return NextResponse.json({

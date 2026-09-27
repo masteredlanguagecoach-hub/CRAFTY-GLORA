@@ -12,7 +12,7 @@ export interface AssistantContext {
   customization?: CustomizationOption;
   giftPackaging?: 'box' | 'wrap' | 'none';
   giftMessage?: string;
-  step?: 'initial' | 'asking_occasion' | 'asking_budget' | 'recommending' | 'customizing' | 'packaging' | 'messaging' | 'cart_ready';
+  step?: 'initial' | 'asking_recipient' | 'asking_occasion' | 'asking_budget' | 'recommending' | 'customizing' | 'packaging' | 'messaging' | 'cart_ready';
 }
 
 export interface AssistantProductRecommendation extends Product {
@@ -39,6 +39,7 @@ export interface AssistantMessage {
   sender: 'user' | 'assistant' | 'system';
   text: string;
   timestamp: string;
+  image?: string; // image preview url or base64
   products?: AssistantProductRecommendation[];
   quickReplies?: string[];
   action?: AssistantActionType;
@@ -58,6 +59,7 @@ export interface AssistantMessage {
 
 export interface ChatRequestPayload {
   message: string;
+  image?: string; // base64 or url
   history: { role: 'user' | 'assistant'; content: string }[];
   context: AssistantContext;
   currentCartItems?: { productId: string; quantity: number }[];
